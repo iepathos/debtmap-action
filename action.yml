@@ -78,12 +78,14 @@ runs:
         if [ "$VERSION" == "latest" ]; then
           VERSION=$(curl -sSL https://api.github.com/repos/iepathos/debtmap/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
         fi
-        [[ "$VERSION" != v* ]] && VERSION="v$VERSION"
+        # Remove 'v' prefix if present
+        VERSION="${VERSION#v}"
 
         # Download and install
-        URL="https://github.com/iepathos/debtmap/releases/download/${VERSION}/debtmap-${PLATFORM}"
+        URL="https://github.com/iepathos/debtmap/releases/download/${VERSION}/debtmap-${PLATFORM}.tar.gz"
         echo "Installing debtmap ${VERSION} for ${PLATFORM}..."
-        curl -sSL -o debtmap "$URL"
+        curl -sSL -o debtmap.tar.gz "$URL"
+        tar -xzf debtmap.tar.gz
         chmod +x debtmap
         ./debtmap --version
 
