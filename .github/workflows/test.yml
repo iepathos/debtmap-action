@@ -1,0 +1,113 @@
+name: Test Action
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-action:
+    name: Test Debtmap Action
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout action repository
+        uses: actions/checkout@v4
+      
+      - name: Setup test project
+        run: |
+          mkdir -p test-project/src
+          cat > test-project/Cargo.toml << 'EOF'
+          [package]
+          name = "test-project"
+          version = "0.1.0"
+          edition = "2021"
+          
+          [dependencies]
+          EOF
+          
+          cat > test-project/src/lib.rs << 'EOF'
+          // TODO: Implement proper error handling
+          pub fn risky_function() -> Result<String, String> {
+              // FIXME: This is a temporary hack
+              Ok("not implemented".to_string())
+          }
+          
+          // TODO: Add unit tests for this module
+          pub mod utils {
+              // TODO: Optimize this function for performance
+              pub fn slow_operation(n: usize) -> usize {
+                  let mut result = 0;
+                  for i in 0..n {
+                      // FIXME: Potential overflow issue
+                      result += i * i;
+                  }
+                  result
+              }
+          }
+          
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              
+              #[test]
+              fn test_risky_function() {
+                  // TODO: Write actual test
+                  assert!(risky_function().is_ok());
+              }
+          }
+          EOF
+      
+      - name: Test basic analysis
+        uses: ./
+        with:
+          path: ./test-project
+          format: json
+          output-file: basic-test.json
+          verbose: true
+      
+      - name: Verify output exists
+        run: |
+          if [ ! -f "basic-test.json" ]; then
+            echo "Error: Output file not created"
+            exit 1
+          fi
+          
+          echo "Output file contents:"
+          cat basic-test.json
+      
+      - name: Test with Rust setup
+        uses: ./
+        with:
+          path: ./test-project
+          format: markdown
+          output-file: with-rust.md
+          rust-version: stable
+          install-method: cargo
+      
+      - name: Test threshold enforcement
+        id: threshold_test
+        uses: ./
+        with:
+          path: ./test-project
+          fail-on-high-debt: true
+          debt-threshold: 10
+        continue-on-error: true
+      
+      - name: Verify threshold was enforced
+        run: |
+          if [ "${{ steps.threshold_test.outcome }}" == "success" ]; then
+            echo "Error: Action should have failed due to high debt"
+            exit 1
+          fi
+          echo "✅ Threshold enforcement working correctly"
+      
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            basic-test.json
+            with-rust.md
+            debtmap-report.*

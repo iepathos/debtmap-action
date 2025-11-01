@@ -1,0 +1,138 @@
+name: 'Debtmap - Code Complexity Analyzer'
+description: 'Analyze code complexity and identify high-risk areas by correlating complexity metrics with test coverage'
+author: 'iepathos'
+branding:
+  icon: 'activity'
+  color: 'orange'
+
+inputs:
+  lcov-file:
+    description: 'Path to LCOV coverage file (optional - enables risk correlation analysis)'
+    required: false
+    default: ''
+
+  path:
+    description: 'Path to the project to analyze'
+    required: false
+    default: '.'
+
+  debtmap-version:
+    description: 'Version of debtmap to use (latest or specific version like v0.1.0)'
+    required: false
+    default: 'latest'
+
+outputs:
+  report-path:
+    description: 'Path to the generated report file'
+    value: ${{ steps.analyze.outputs.report-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download debtmap binary
+      shell: bash
+      run: |
+        # Determine the platform
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        
+        # Map architecture names
+        case "$ARCH" in
+          x86_64)
+            ARCH="x86_64"
+            ;;
+          aarch64|arm64)
+            ARCH="aarch64"
+            ;;
+          *)
+            echo "Unsupported architecture: $ARCH"
+            exit 1
+            ;;
+        esac
+        
+        # Map OS names for binary releases
+        case "$OS" in
+          linux)
+            PLATFORM="${ARCH}-unknown-linux-gnu"
+            ;;
+          darwin)
+            PLATFORM="${ARCH}-apple-darwin"
+            ;;
+          *)
+            echo "Unsupported OS: $OS"
+            exit 1
+            ;;
+        esac
+        
+        # Determine version to download
+        VERSION="${{ inputs.debtmap-version }}"
+        if [ "$VERSION" == "latest" ]; then
+          # Get latest release tag
+          VERSION=$(curl -s https://api.github.com/repos/iepathos/debtmap/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "Failed to fetch latest version"
+            exit 1
+          fi
+        fi
+        
+        # Ensure version starts with 'v'
+        if [[ ! "$VERSION" == v* ]]; then
+          VERSION="v$VERSION"
+        fi
+        
+        # Download the binary
+        BINARY_NAME="debtmap-${PLATFORM}"
+        DOWNLOAD_URL="https://github.com/iepathos/debtmap/releases/download/${VERSION}/${BINARY_NAME}"
+        
+        echo "Downloading debtmap ${VERSION} for ${PLATFORM}..."
+        echo "URL: ${DOWNLOAD_URL}"
+        
+        curl -L -o debtmap "${DOWNLOAD_URL}"
+        chmod +x debtmap
+        
+        # Verify it works
+        ./debtmap --version
+
+    - name: Run debtmap analysis
+      id: analyze
+      shell: bash
+      run: |
+        # Build the debtmap command
+        CMD="./debtmap analyze ${{ inputs.path }}"
+
+        # Add lcov file if provided
+        if [ -n "${{ inputs.lcov-file }}" ]; then
+          CMD="$CMD --lcov ${{ inputs.lcov-file }}"
+        fi
+
+        # Output to markdown format
+        OUTPUT_FILE="debtmap-report.md"
+        CMD="$CMD --format markdown --output $OUTPUT_FILE"
+
+        # Run the analysis
+        echo "Running: $CMD"
+        $CMD
+
+        # Set output
+        echo "report-path=$OUTPUT_FILE" >> $GITHUB_OUTPUT
+
+        # Generate GitHub step summary
+        if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+          {
+            echo "## 📊 Debtmap Analysis Results"
+            echo ""
+            if [ -f "$OUTPUT_FILE" ]; then
+              cat "$OUTPUT_FILE"
+            else
+              echo "Analysis complete. Report saved to: $OUTPUT_FILE"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: Upload debtmap report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: debtmap-report
+        path: debtmap-report.md
+        retention-days: 7

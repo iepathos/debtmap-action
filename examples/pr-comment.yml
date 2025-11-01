@@ -1,0 +1,55 @@
+name: PR Complexity Analysis
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**.rs'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  analyze-pr:
+    name: Analyze PR Complexity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-pr-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate test coverage
+        run: cargo llvm-cov --lcov --output-path lcov.info
+        continue-on-error: true
+
+      - name: Run Debtmap Analysis
+        uses: iepathos/debtmap-action@v1
+        with:
+          lcov-file: lcov.info
+
+      - name: Check report
+        run: |
+          echo "## 📊 Code Complexity Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          cat debtmap-report.md >> $GITHUB_STEP_SUMMARY

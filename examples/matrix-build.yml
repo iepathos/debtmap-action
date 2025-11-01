@@ -1,0 +1,99 @@
+name: Matrix Complexity Analysis
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+
+jobs:
+  analyze-matrix:
+    name: Analyze (${{ matrix.project.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - name: core
+            path: ./core
+          - name: cli
+            path: ./cli
+          - name: web
+            path: ./web
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache for ${{ matrix.project.name }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ${{ matrix.project.path }}/target/
+          key: ${{ runner.os }}-${{ matrix.project.name }}-${{ hashFiles(format('{0}/**/Cargo.lock', matrix.project.path)) }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate coverage
+        working-directory: ${{ matrix.project.path }}
+        run: cargo llvm-cov --lcov --output-path lcov.info
+        continue-on-error: true
+
+      - name: Analyze ${{ matrix.project.name }}
+        uses: iepathos/debtmap-action@v1
+        with:
+          path: ${{ matrix.project.path }}
+          lcov-file: ${{ matrix.project.path }}/lcov.info
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debtmap-${{ matrix.project.name }}
+          path: debtmap-report.md
+          retention-days: 7
+
+  summarize:
+    name: Summarize Results
+    needs: analyze-matrix
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: ./reports
+
+      - name: Generate consolidated summary
+        run: |
+          echo "# 📊 Consolidated Complexity Analysis" > summary.md
+          echo "" >> summary.md
+
+          for dir in ./reports/debtmap-*/; do
+            if [ -d "$dir" ]; then
+              PROJECT=$(basename "$dir" | sed 's/debtmap-//')
+              echo "## $PROJECT" >> summary.md
+              echo "" >> summary.md
+              if [ -f "$dir/debtmap-report.md" ]; then
+                cat "$dir/debtmap-report.md" >> summary.md
+              fi
+              echo "" >> summary.md
+            fi
+          done
+
+          cat summary.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload consolidated summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidated-summary
+          path: summary.md
+          retention-days: 30

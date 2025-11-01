@@ -1,0 +1,24 @@
+name: Basic Debtmap Analysis
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze-complexity:
+    name: Analyze Code Complexity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Debtmap Analysis
+        uses: iepathos/debtmap-action@v1
+        with:
+          path: .
+
+      - name: View Report
+        if: always()
+        run: cat debtmap-report.md

@@ -1,0 +1,25 @@
+# Test artifacts
+test-project/
+*.json
+*.md
+!README.md
+!examples/*.yml
+!.github/**/*.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+temp/
+tmp/
