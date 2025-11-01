@@ -45,8 +45,13 @@ Analyze code complexity and identify high-risk areas in your Rust codebase. Debt
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `lcov-file` | Path to LCOV coverage file (enables risk correlation) | No | - |
+| `coverage-file` | Alias for `lcov-file` (for compatibility) | No | - |
 | `path` | Path to the project to analyze | No | `.` |
 | `debtmap-version` | Debtmap version to use (e.g., `latest`, `v0.1.0`) | No | `latest` |
+| `command` | Command to run: `analyze` (show issues) or `validate` (enforce thresholds) | No | `analyze` |
+| `format` | Output format: `markdown`, `json`, or `text` | No | `markdown` |
+| `output-file` | Output file path (auto-generated if not specified) | No | - |
+| `fail-on-threshold` | Fail job if tech debt exceeds thresholds (validate mode only) | No | `false` |
 
 ## Outputs
 
@@ -139,6 +144,75 @@ jobs:
           # Config comes from .debtmap.toml
 ```
 
+### Tech Debt Quality Gate (Validate Mode)
+
+Use `validate` command to enforce thresholds and fail CI if tech debt exceeds limits:
+
+```yaml
+name: Tech Debt Quality Gate
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate Coverage
+        run: cargo llvm-cov --lcov --output-path lcov.info
+
+      # Show analysis for visibility
+      - name: Analyze Tech Debt
+        uses: iepathos/debtmap-action@v1
+        with:
+          coverage-file: lcov.info
+          command: analyze
+
+      # Enforce thresholds (fails if exceeded)
+      - name: Validate Thresholds
+        uses: iepathos/debtmap-action@v1
+        with:
+          coverage-file: lcov.info
+          command: validate
+          format: json
+          fail-on-threshold: true
+```
+
+Configure thresholds in `.debtmap.toml`:
+```toml
+[thresholds]
+complexity = 15
+cognitive_complexity = 10
+max_debt_density = 0.25  # Fail if >25% of code is high-risk
+```
+
+### Different Output Formats
+
+```yaml
+# JSON output for programmatic processing
+- uses: iepathos/debtmap-action@v1
+  with:
+    format: json
+    output-file: tech-debt.json
+
+# Plain text for simple reports
+- uses: iepathos/debtmap-action@v1
+  with:
+    format: text
+    output-file: tech-debt.txt
+
+# Markdown (default) for GitHub summaries
+- uses: iepathos/debtmap-action@v1
+  with:
+    format: markdown
+```
+
 ### Alternative Coverage Tools
 
 Debtmap accepts any LCOV-format coverage file. Here are common ways to generate it:
@@ -185,7 +259,11 @@ Debtmap identifies and prioritizes technical debt using:
 - **Pattern Recognition**: Reduces false positives from repetitive but simple code
 - **Actionable Recommendations**: Tells you exactly what to refactor or test first
 
-The output shows top priority items ranked by risk score, with specific guidance on what actions to take.
+### Two Operating Modes
+
+**Analyze Mode (Default)**: Shows detailed tech debt analysis with recommendations. Great for visibility and understanding where issues are. Does not fail the job.
+
+**Validate Mode**: Enforces quality gates by checking if tech debt exceeds configured thresholds. Use with `fail-on-threshold: true` to block merges that introduce excessive debt.
 
 ## Binary Releases
 

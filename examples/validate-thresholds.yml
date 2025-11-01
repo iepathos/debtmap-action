@@ -1,0 +1,47 @@
+name: Tech Debt Quality Gate
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    name: Validate Tech Debt Thresholds
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate Coverage
+        run: cargo llvm-cov --lcov --output-path lcov.info
+
+      # First show the analysis for visibility
+      - name: Analyze Tech Debt
+        uses: iepathos/debtmap-action@v1
+        with:
+          coverage-file: lcov.info
+          command: analyze
+          format: markdown
+
+      # Then enforce thresholds (will fail if exceeded)
+      - name: Enforce Tech Debt Thresholds
+        uses: iepathos/debtmap-action@v1
+        with:
+          coverage-file: lcov.info
+          command: validate
+          format: json
+          fail-on-threshold: true
+
+      # This only runs if validation passed
+      - name: Success
+        run: echo "✅ Tech debt is within acceptable thresholds"
