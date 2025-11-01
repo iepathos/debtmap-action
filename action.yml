@@ -29,68 +29,37 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Download debtmap binary
+    - name: Install debtmap
       shell: bash
       run: |
-        # Determine the platform
+        # Detect platform
         OS=$(uname -s | tr '[:upper:]' '[:lower:]')
         ARCH=$(uname -m)
-        
-        # Map architecture names
-        case "$ARCH" in
-          x86_64)
-            ARCH="x86_64"
-            ;;
-          aarch64|arm64)
-            ARCH="aarch64"
-            ;;
+
+        # Map to release binary names
+        case "${OS}-${ARCH}" in
+          linux-x86_64)    PLATFORM="x86_64-unknown-linux-gnu" ;;
+          linux-aarch64)   PLATFORM="aarch64-unknown-linux-gnu" ;;
+          darwin-x86_64)   PLATFORM="x86_64-apple-darwin" ;;
+          darwin-arm64)    PLATFORM="aarch64-apple-darwin" ;;
           *)
-            echo "Unsupported architecture: $ARCH"
+            echo "Unsupported platform: ${OS}-${ARCH}"
             exit 1
             ;;
         esac
-        
-        # Map OS names for binary releases
-        case "$OS" in
-          linux)
-            PLATFORM="${ARCH}-unknown-linux-gnu"
-            ;;
-          darwin)
-            PLATFORM="${ARCH}-apple-darwin"
-            ;;
-          *)
-            echo "Unsupported OS: $OS"
-            exit 1
-            ;;
-        esac
-        
-        # Determine version to download
+
+        # Get version
         VERSION="${{ inputs.debtmap-version }}"
         if [ "$VERSION" == "latest" ]; then
-          # Get latest release tag
-          VERSION=$(curl -s https://api.github.com/repos/iepathos/debtmap/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-          if [ -z "$VERSION" ]; then
-            echo "Failed to fetch latest version"
-            exit 1
-          fi
+          VERSION=$(curl -sSL https://api.github.com/repos/iepathos/debtmap/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
         fi
-        
-        # Ensure version starts with 'v'
-        if [[ ! "$VERSION" == v* ]]; then
-          VERSION="v$VERSION"
-        fi
-        
-        # Download the binary
-        BINARY_NAME="debtmap-${PLATFORM}"
-        DOWNLOAD_URL="https://github.com/iepathos/debtmap/releases/download/${VERSION}/${BINARY_NAME}"
-        
-        echo "Downloading debtmap ${VERSION} for ${PLATFORM}..."
-        echo "URL: ${DOWNLOAD_URL}"
-        
-        curl -L -o debtmap "${DOWNLOAD_URL}"
+        [[ "$VERSION" != v* ]] && VERSION="v$VERSION"
+
+        # Download and install
+        URL="https://github.com/iepathos/debtmap/releases/download/${VERSION}/debtmap-${PLATFORM}"
+        echo "Installing debtmap ${VERSION} for ${PLATFORM}..."
+        curl -sSL -o debtmap "$URL"
         chmod +x debtmap
-        
-        # Verify it works
         ./debtmap --version
 
     - name: Run debtmap analysis
